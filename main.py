@@ -1,6 +1,9 @@
 import requests
 import time
 import os
+from flask import Flask
+
+app = Flask(__name__)
 
 TOKEN = os.getenv("TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
@@ -9,10 +12,14 @@ def enviar(msg):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     requests.post(url, data={"chat_id": CHAT_ID, "text": msg})
 
+@app.route("/")
+def home():
+    return "Bot rodando!"
+
 def verificar():
     produtos = [
         {
-            "nome": "LG OLED 55 C3",
+            "nome": "LG OLED",
             "preco": 2499,
             "preco_medio": 5500,
             "link": "https://exemplo.com"
@@ -22,19 +29,19 @@ def verificar():
     for p in produtos:
         if "LG" in p["nome"] and "OLED" in p["nome"]:
             if p["preco"] < 0.6 * p["preco_medio"]:
-                enviar(f"""
-🚨 POSSÍVEL BUG DETECTADO
+                enviar(f"🚨 BUG: {p['nome']} - R$ {p['preco']}")
 
-📺 {p["nome"]}
-💰 R$ {p["preco"]}
-📉 Normal: ~R$ {p["preco_medio"]}
+if __name__ == "__main__":
+    enviar("🤖 Bot iniciado!")
 
-🔗 {p["link"]}
-""")
+    import threading
 
-# mensagem inicial (pra teste)
-enviar("🤖 Bot iniciado com sucesso!")
+    def loop():
+        while True:
+            verificar()
+            time.sleep(300)
 
-while True:
-    verificar()
-    time.sleep(300)
+    t = threading.Thread(target=loop)
+    t.start()
+
+    app.run(host="0.0.0.0", port=10000)
