@@ -2,6 +2,7 @@ import requests
 import time
 import os
 import re
+import json
 from flask import Flask
 
 app = Flask(__name__)
@@ -9,12 +10,25 @@ app = Flask(__name__)
 TOKEN = os.getenv("TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 
-# memória simples pra evitar repetição
-enviados = set()
+ARQUIVO_CACHE = "enviados.json"
 
 def enviar(msg):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     requests.post(url, data={"chat_id": CHAT_ID, "text": msg})
+
+# 🔒 salvar histórico
+def carregar_enviados():
+    try:
+        with open(ARQUIVO_CACHE, "r") as f:
+            return set(json.load(f))
+    except:
+        return set()
+
+def salvar_enviados(enviados):
+    with open(ARQUIVO_CACHE, "w") as f:
+        json.dump(list(enviados), f)
+
+enviados = carregar_enviados()
 
 def buscar_html():
     url = "https://api.allorigins.win/raw?url=https://www.promobit.com.br/busca/lg%20oled/"
@@ -31,11 +45,24 @@ def get_preco_referencia(modelo):
     }
     return referencias.get(modelo, 4800)
 
+def identificar_loja(texto):
+    texto = texto.lower()
+    if "amazon" in texto:
+        return "Amazon"
+    elif "magalu" in texto or "magazine luiza" in texto:
+        return "Magalu"
+    elif "casas bahia" in texto:
+        return "Casas Bahia"
+    elif "mercado livre" in texto:
+        return "Mercado Livre"
+    else:
+        return "Loja não identificada"
+
 def extrair_ofertas(html):
     ofertas = []
 
     blocos = re.findall(
-        r'<a.*?href="(.*?)".*?>(.*?)</a>.*?r\$\s?(\d{1,3}(?:\.\d{3})*)',
+        r'<a.*?href="(.*?)".*?>(.*?)</a>.*?(?:R\$|\$)\s?(\d{1,3}(?:\.\d{3})*)',
         html,
         re.IGNORECASE | re.DOTALL
     )
@@ -45,21 +72,42 @@ def extrair_ofertas(html):
 
         if "lg" in titulo_limpo.lower() and "oled" in titulo_limpo.lower():
 
+            # ignora usados / open box
+            if any(x in titulo_limpo.lower() for x in ["usado", "open box", "reembalado"]):
+                continue
+
             modelo_match = re.search(r'\b([cbg]\d)\b', titulo_limpo.lower())
             modelo = modelo_match.group(1).upper() if modelo_match else "N/A"
 
             preco_int = int(preco.replace(".", ""))
 
+            loja = identificar_loja(titulo_limpo)
+
             ofertas.append({
                 "titulo": titulo_limpo,
                 "modelo": modelo,
                 "preco": preco_int,
-                "link": "https://www.promobit.com.br" + link if link.startswith("/") else link
+                "link": "https://www.promobit.com.br" + link if link.startswith("/") else link,
+                "loja": loja
             })
 
     return ofertas
 
+def classificar_oferta(preco, ref):
+    desconto = int((1 - preco / ref) * 100)
+
+    if desconto >= 50:
+        return "🔥 BUG FORTE", desconto
+    elif desconto >= 35:
+        return "⚡ OFERTA INSANA", desconto
+    elif desconto >= 20:
+        return "💰 ÓTIMA OFERTA", desconto
+    else:
+        return "📉 abaixo do normal", desconto
+
 def analisar():
+    global enviados
+
     html = buscar_html()
     if not html:
         return
@@ -67,49 +115,43 @@ def analisar():
     ofertas = extrair_ofertas(html)
 
     for oferta in ofertas:
+        link = oferta["link"]
+
+        if link in enviados:
+            continue
+
         modelo = oferta["modelo"]
         preco = oferta["preco"]
         ref = get_preco_referencia(modelo)
 
-        desconto = int((1 - preco / ref) * 100)
-
-        # evita repetição (usa link como ID)
-        if oferta["link"] in enviados:
-            continue
-
         # filtro profissional
-        if preco < ref * 0.9:  # pelo menos 10% abaixo
+        if preco < ref * 0.9:
 
-            # classificação
-            if desconto >= 50:
-                nivel = "🔥 BUG FORTE"
-            elif desconto >= 35:
-                nivel = "⚡ OFERTA INSANA"
-            elif desconto >= 20:
-                nivel = "💰 ÓTIMA OFERTA"
-            else:
-                nivel = "📉 abaixo do normal"
+            nivel, desconto = classificar_oferta(preco, ref)
 
             enviar(f"""
 {nivel}
 
 📺 {oferta['titulo']}
 🔎 Modelo: {modelo}
+🏪 Loja: {oferta['loja']}
+
 💰 R$ {preco}
 📊 Referência: R$ {ref}
 📉 Desconto: {desconto}%
 
-🔗 {oferta['link']}
+🔗 {link}
 """)
 
-            enviados.add(oferta["link"])
+            enviados.add(link)
+            salvar_enviados(enviados)
 
 @app.route("/")
 def home():
     return "Bot rodando!"
 
 if __name__ == "__main__":
-    enviar("🤖 CAÇADOR LG OLED ATIVO!")
+    enviar("🤖 CAÇADOR LG OLED PRO+ ATIVO!")
 
     import threading
 
