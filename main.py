@@ -3,6 +3,7 @@ import time
 import os
 import re
 import json
+import random
 from flask import Flask
 
 app = Flask(__name__)
@@ -16,7 +17,7 @@ def enviar(msg):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     requests.post(url, data={"chat_id": CHAT_ID, "text": msg})
 
-# 🔒 salvar histórico
+# 🔒 histórico (evita repetir alertas)
 def carregar_enviados():
     try:
         with open(ARQUIVO_CACHE, "r") as f:
@@ -72,7 +73,7 @@ def extrair_ofertas(html):
 
         if "lg" in titulo_limpo.lower() and "oled" in titulo_limpo.lower():
 
-            # ignora usados / open box
+            # ignora usados
             if any(x in titulo_limpo.lower() for x in ["usado", "open box", "reembalado"]):
                 continue
 
@@ -124,7 +125,6 @@ def analisar():
         preco = oferta["preco"]
         ref = get_preco_referencia(modelo)
 
-        # filtro profissional
         if preco < ref * 0.9:
 
             nivel, desconto = classificar_oferta(preco, ref)
@@ -151,14 +151,15 @@ def home():
     return "Bot rodando!"
 
 if __name__ == "__main__":
-    enviar("🤖 CAÇADOR LG OLED PRO+ ATIVO!")
+    enviar("🤖 CAÇADOR LG OLED PRO+ (ULTRA RÁPIDO) ATIVO!")
 
     import threading
 
     def loop():
         while True:
             analisar()
-            time.sleep(300)
+            # ⚡ intervalo inteligente (45 a 75 segundos)
+            time.sleep(random.randint(45, 75))
 
     t = threading.Thread(target=loop)
     t.start()
