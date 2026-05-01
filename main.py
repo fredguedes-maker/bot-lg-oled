@@ -5,6 +5,7 @@ import re
 import json
 import random
 from flask import Flask
+from concurrent.futures import ThreadPoolExecutor
 
 app = Flask(__name__)
 
@@ -13,11 +14,20 @@ CHAT_ID = os.getenv("CHAT_ID")
 
 ARQUIVO_CACHE = "enviados.json"
 
+LOJAS_CONFIAVEIS = [
+    "amazon",
+    "magalu",
+    "magazine luiza",
+    "casas bahia",
+    "mercado livre",
+    "fast shop",
+    "pontofrio"
+]
+
 def enviar(msg):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     requests.post(url, data={"chat_id": CHAT_ID, "text": msg})
 
-# 🔒 histórico (evita repetir alertas)
 def carregar_enviados():
     try:
         with open(ARQUIVO_CACHE, "r") as f:
@@ -31,12 +41,28 @@ def salvar_enviados(enviados):
 
 enviados = carregar_enviados()
 
-def buscar_html():
-    url = "https://api.allorigins.win/raw?url=https://www.promobit.com.br/busca/lg%20oled/"
+# 🔄 busca paralela
+def fetch(url):
     try:
-        return requests.get(url, timeout=10).text
+        return requests.get(url, timeout=8).text
     except:
         return ""
+
+def buscar_fontes():
+    urls = [
+        "https://api.allorigins.win/raw?url=https://www.promobit.com.br/busca/lg%20oled/",
+        "https://api.allorigins.win/raw?url=https://www.pelando.com.br/search?q=lg%20oled"
+    ]
+
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        return list(executor.map(fetch, urls))
+
+def identificar_loja(texto):
+    texto = texto.lower()
+    for loja in LOJAS_CONFIAVEIS:
+        if loja in texto:
+            return loja.title()
+    return None
 
 def get_preco_referencia(modelo):
     referencias = {
@@ -45,19 +71,6 @@ def get_preco_referencia(modelo):
         "B2": 4800
     }
     return referencias.get(modelo, 4800)
-
-def identificar_loja(texto):
-    texto = texto.lower()
-    if "amazon" in texto:
-        return "Amazon"
-    elif "magalu" in texto or "magazine luiza" in texto:
-        return "Magalu"
-    elif "casas bahia" in texto:
-        return "Casas Bahia"
-    elif "mercado livre" in texto:
-        return "Mercado Livre"
-    else:
-        return "Loja não identificada"
 
 def extrair_ofertas(html):
     ofertas = []
@@ -69,23 +82,24 @@ def extrair_ofertas(html):
     )
 
     for link, titulo, preco in blocos:
-        titulo_limpo = re.sub('<.*?>', '', titulo).strip()
+        titulo_limpo = re.sub('<.*?>', '', titulo).strip().lower()
 
-        if "lg" in titulo_limpo.lower() and "oled" in titulo_limpo.lower():
+        if "lg" in titulo_limpo and "oled" in titulo_limpo:
 
-            # ignora usados
-            if any(x in titulo_limpo.lower() for x in ["usado", "open box", "reembalado"]):
+            if any(x in titulo_limpo for x in ["usado", "open box", "reembalado"]):
                 continue
 
-            modelo_match = re.search(r'\b([cbg]\d)\b', titulo_limpo.lower())
+            modelo_match = re.search(r'\b([cbg]\d)\b', titulo_limpo)
             modelo = modelo_match.group(1).upper() if modelo_match else "N/A"
 
             preco_int = int(preco.replace(".", ""))
 
             loja = identificar_loja(titulo_limpo)
+            if not loja:
+                continue
 
             ofertas.append({
-                "titulo": titulo_limpo,
+                "titulo": titulo_limpo.title(),
                 "modelo": modelo,
                 "preco": preco_int,
                 "link": "https://www.promobit.com.br" + link if link.startswith("/") else link,
@@ -94,50 +108,50 @@ def extrair_ofertas(html):
 
     return ofertas
 
-def classificar_oferta(preco, ref):
+def classificar(preco, ref):
     desconto = int((1 - preco / ref) * 100)
-
-    if desconto >= 50:
-        return "🔥 BUG FORTE", desconto
-    elif desconto >= 35:
-        return "⚡ OFERTA INSANA", desconto
-    elif desconto >= 20:
-        return "💰 ÓTIMA OFERTA", desconto
-    else:
-        return "📉 abaixo do normal", desconto
+    return desconto
 
 def analisar():
     global enviados
 
-    html = buscar_html()
-    if not html:
-        return
+    htmls = buscar_fontes()
 
-    ofertas = extrair_ofertas(html)
-
-    for oferta in ofertas:
-        link = oferta["link"]
-
-        if link in enviados:
+    for html in htmls:
+        if not html:
             continue
 
-        modelo = oferta["modelo"]
-        preco = oferta["preco"]
-        ref = get_preco_referencia(modelo)
+        ofertas = extrair_ofertas(html)
 
-        if preco < ref * 0.9:
+        for oferta in ofertas:
+            link = oferta["link"]
 
-            nivel, desconto = classificar_oferta(preco, ref)
+            if link in enviados:
+                continue
+
+            preco = oferta["preco"]
+            ref = get_preco_referencia(oferta["modelo"])
+            desconto = classificar(preco, ref)
+
+            # 🔥 NOVO: sistema de prioridade
+            if desconto >= 50:
+                prioridade = "🔥 BUG FORTE"
+            elif desconto >= 35:
+                prioridade = "⚡ ALERTA RÁPIDO"
+            elif desconto >= 20:
+                prioridade = "💰 BOA OFERTA"
+            else:
+                continue
 
             enviar(f"""
-{nivel}
+{prioridade}
 
 📺 {oferta['titulo']}
-🔎 Modelo: {modelo}
+🔎 Modelo: {oferta['modelo']}
 🏪 Loja: {oferta['loja']}
 
 💰 R$ {preco}
-📊 Referência: R$ {ref}
+📊 Ref: R$ {ref}
 📉 Desconto: {desconto}%
 
 🔗 {link}
@@ -151,15 +165,14 @@ def home():
     return "Bot rodando!"
 
 if __name__ == "__main__":
-    enviar("🤖 CAÇADOR LG OLED PRO+ (ULTRA RÁPIDO) ATIVO!")
+    enviar("🤖 CAÇADOR ELITE LG OLED ATIVO!")
 
     import threading
 
     def loop():
         while True:
             analisar()
-            # ⚡ intervalo inteligente (45 a 75 segundos)
-            time.sleep(random.randint(45, 75))
+            time.sleep(random.randint(30, 60))  # ⚡ ultra rápido
 
     t = threading.Thread(target=loop)
     t.start()
