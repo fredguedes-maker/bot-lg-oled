@@ -41,7 +41,6 @@ def salvar_enviados(enviados):
 
 enviados = carregar_enviados()
 
-# 🔄 busca paralela
 def fetch(url):
     try:
         return requests.get(url, timeout=8).text
@@ -76,7 +75,7 @@ def extrair_ofertas(html):
     ofertas = []
 
     blocos = re.findall(
-        r'<a.*?href="(.*?)".*?>(.*?)</a>.*?(?:R\$|\$)\s?(\d{1,3}(?:\.\d{3})*)',
+        r'<a.*?href="(.*?)".*?>(.*?)</a>.*?(?:R\$|\$)\s?(\d{1,3}(?:[\.,]\d{3})*)',
         html,
         re.IGNORECASE | re.DOTALL
     )
@@ -92,7 +91,7 @@ def extrair_ofertas(html):
             modelo_match = re.search(r'\b([cbg]\d)\b', titulo_limpo)
             modelo = modelo_match.group(1).upper() if modelo_match else "N/A"
 
-            preco_int = int(preco.replace(".", ""))
+            preco_int = int(preco.replace(".", "").replace(",", ""))
 
             loja = identificar_loja(titulo_limpo)
             if not loja:
@@ -108,9 +107,29 @@ def extrair_ofertas(html):
 
     return ofertas
 
-def classificar(preco, ref):
-    desconto = int((1 - preco / ref) * 100)
-    return desconto
+# 🧠 DETECÇÃO INTELIGENTE DE BUG
+def score_oferta(preco, ref, titulo):
+    desconto = (1 - preco / ref)
+
+    score = 0
+
+    # peso principal: desconto
+    if desconto > 0.5:
+        score += 60
+    elif desconto > 0.35:
+        score += 40
+    elif desconto > 0.2:
+        score += 20
+
+    # palavras suspeitas de bug
+    if any(x in titulo for x in ["erro", "bug", "cupom", "price error"]):
+        score += 20
+
+    # preço muito fora da curva
+    if preco < ref * 0.6:
+        score += 30
+
+    return score, int(desconto * 100)
 
 def analisar():
     global enviados
@@ -131,20 +150,21 @@ def analisar():
 
             preco = oferta["preco"]
             ref = get_preco_referencia(oferta["modelo"])
-            desconto = classificar(preco, ref)
 
-            # 🔥 NOVO: sistema de prioridade
-            if desconto >= 50:
-                prioridade = "🔥 BUG FORTE"
-            elif desconto >= 35:
-                prioridade = "⚡ ALERTA RÁPIDO"
-            elif desconto >= 20:
-                prioridade = "💰 BOA OFERTA"
+            score, desconto = score_oferta(preco, ref, oferta["titulo"])
+
+            # 🎯 FILTRO INTELIGENTE
+            if score >= 70:
+                nivel = "🔥 BUG ALTAMENTE PROVÁVEL"
+            elif score >= 50:
+                nivel = "⚡ POSSÍVEL BUG"
+            elif score >= 30:
+                nivel = "💰 BOA OPORTUNIDADE"
             else:
                 continue
 
             enviar(f"""
-{prioridade}
+{nivel}
 
 📺 {oferta['titulo']}
 🔎 Modelo: {oferta['modelo']}
@@ -153,6 +173,7 @@ def analisar():
 💰 R$ {preco}
 📊 Ref: R$ {ref}
 📉 Desconto: {desconto}%
+🧠 Score: {score}
 
 🔗 {link}
 """)
@@ -165,14 +186,14 @@ def home():
     return "Bot rodando!"
 
 if __name__ == "__main__":
-    enviar("🤖 CAÇADOR ELITE LG OLED ATIVO!")
+    enviar("🤖 CAÇADOR INTELIGENTE ATIVO!")
 
     import threading
 
     def loop():
         while True:
             analisar()
-            time.sleep(random.randint(30, 60))  # ⚡ ultra rápido
+            time.sleep(random.randint(30, 60))
 
     t = threading.Thread(target=loop)
     t.start()
