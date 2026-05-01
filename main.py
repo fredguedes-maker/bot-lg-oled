@@ -24,10 +24,18 @@ LOJAS_CONFIAVEIS = [
     "pontofrio"
 ]
 
+# 🔔 envio com log
 def enviar(msg):
-    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-    requests.post(url, data={"chat_id": CHAT_ID, "text": msg})
+    print("📨 Tentando enviar mensagem...")
+    try:
+        url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+        r = requests.post(url, data={"chat_id": CHAT_ID, "text": msg})
+        print("✅ Status envio:", r.status_code)
+        print("📄 Resposta:", r.text)
+    except Exception as e:
+        print("❌ Erro ao enviar:", e)
 
+# 🔒 cache
 def carregar_enviados():
     try:
         with open(ARQUIVO_CACHE, "r") as f:
@@ -41,10 +49,13 @@ def salvar_enviados(enviados):
 
 enviados = carregar_enviados()
 
+# 🌐 fetch paralelo
 def fetch(url):
     try:
+        print(f"🔎 Buscando: {url}")
         return requests.get(url, timeout=8).text
-    except:
+    except Exception as e:
+        print("❌ Erro ao buscar:", e)
         return ""
 
 def buscar_fontes():
@@ -80,6 +91,8 @@ def extrair_ofertas(html):
         re.IGNORECASE | re.DOTALL
     )
 
+    print(f"🔍 Ofertas encontradas: {len(blocos)}")
+
     for link, titulo, preco in blocos:
         titulo_limpo = re.sub('<.*?>', '', titulo).strip().lower()
 
@@ -105,15 +118,14 @@ def extrair_ofertas(html):
                 "loja": loja
             })
 
+    print(f"✅ Ofertas filtradas LG OLED: {len(ofertas)}")
     return ofertas
 
-# 🧠 DETECÇÃO INTELIGENTE DE BUG
+# 🧠 score inteligente
 def score_oferta(preco, ref, titulo):
     desconto = (1 - preco / ref)
-
     score = 0
 
-    # peso principal: desconto
     if desconto > 0.5:
         score += 60
     elif desconto > 0.35:
@@ -121,11 +133,9 @@ def score_oferta(preco, ref, titulo):
     elif desconto > 0.2:
         score += 20
 
-    # palavras suspeitas de bug
-    if any(x in titulo for x in ["erro", "bug", "cupom", "price error"]):
+    if any(x in titulo for x in ["erro", "bug", "cupom"]):
         score += 20
 
-    # preço muito fora da curva
     if preco < ref * 0.6:
         score += 30
 
@@ -133,6 +143,8 @@ def score_oferta(preco, ref, titulo):
 
 def analisar():
     global enviados
+
+    print("🔁 Rodando análise...")
 
     htmls = buscar_fontes()
 
@@ -153,7 +165,8 @@ def analisar():
 
             score, desconto = score_oferta(preco, ref, oferta["titulo"])
 
-            # 🎯 FILTRO INTELIGENTE
+            print(f"📊 {oferta['modelo']} - R${preco} - Score {score}")
+
             if score >= 70:
                 nivel = "🔥 BUG ALTAMENTE PROVÁVEL"
             elif score >= 50:
@@ -186,6 +199,10 @@ def home():
     return "Bot rodando!"
 
 if __name__ == "__main__":
+    print("🚀 BOT INICIANDO...")
+    print("TOKEN:", "OK" if TOKEN else "FALTANDO")
+    print("CHAT_ID:", "OK" if CHAT_ID else "FALTANDO")
+
     enviar("🤖 CAÇADOR INTELIGENTE ATIVO!")
 
     import threading
