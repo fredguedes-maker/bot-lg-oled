@@ -173,6 +173,8 @@ def analisar():
                 nivel = "⚡ POSSÍVEL BUG"
             elif score >= 30:
                 nivel = "💰 BOA OPORTUNIDADE"
+            elif score >= 10:
+                nivel = "🟢 OFERTA DETECTADA"
             else:
                 continue
 
