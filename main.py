@@ -76,9 +76,11 @@ def identificar_loja(texto):
 
 def get_preco_referencia(modelo):
     referencias = {
-        "C3": 5500,
-        "C2": 5000,
-        "B2": 4800
+        "B3": 4300,
+        "C2": 4500,
+        "C3": 4700,
+        "C4": 4700,
+        "C5": 4800
     }
     return referencias.get(modelo, 4800)
 
