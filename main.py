@@ -151,10 +151,12 @@ def analisar():
     htmls = buscar_fontes()
 
     for html in htmls:
+        print(f"HTML recebido: {len(html)} caracteres")
         if not html:
             continue
 
         ofertas = extrair_ofertas(html)
+        print(f"Ofertas extraídas: {len(ofertas)}")
 
         for oferta in ofertas:
             link = oferta["link"]
