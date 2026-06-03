@@ -53,20 +53,31 @@ enviados = carregar_enviados()
 def fetch(url):
     try:
         print(f"🔎 Buscando: {url}")
-        return requests.get(url, timeout=8).text
-    except Exception as e:
-        print("❌ Erro ao buscar:", e)
-        return ""
 
+        r = requests.get(url, timeout=15)
+
+        print(f"✅ Status: {r.status_code}")
+        print(f"📏 Tamanho HTML: {len(r.text)}")
+
+        return r.text
+
+    except Exception as e:
+        print(f"❌ Erro fetch: {e}")
+        return ""
 def buscar_fontes():
     urls = [
         "https://api.allorigins.win/raw?url=https://www.promobit.com.br/busca/lg%20oled/",
         "https://api.allorigins.win/raw?url=https://www.pelando.com.br/search?q=lg%20oled"
     ]
 
-    with ThreadPoolExecutor(max_workers=4) as executor:
-        return list(executor.map(fetch, urls))
+    print("🚀 Iniciando busca das fontes")
 
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        resultados = list(executor.map(fetch, urls))
+
+    print(f"📦 Fontes retornadas: {len(resultados)}")
+
+    return resultados
 def identificar_loja(texto):
     texto = texto.lower()
     for loja in LOJAS_CONFIAVEIS:
