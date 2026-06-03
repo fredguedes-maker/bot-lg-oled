@@ -65,17 +65,30 @@ def fetch(url):
         print(f"❌ Erro fetch: {e}")
         return ""
 def buscar_fontes():
+
     urls = [
         "https://api.allorigins.win/raw?url=https://www.promobit.com.br/busca/lg%20oled/",
         "https://api.allorigins.win/raw?url=https://www.pelando.com.br/search?q=lg%20oled"
     ]
 
-    print("🚀 Iniciando busca das fontes")
+    resultados = []
 
-    with ThreadPoolExecutor(max_workers=2) as executor:
-        resultados = list(executor.map(fetch, urls))
+    for url in urls:
 
-    print(f"📦 Fontes retornadas: {len(resultados)}")
+        print(f"🌐 Testando URL: {url}")
+
+        try:
+
+            r = requests.get(url, timeout=15)
+
+            print(f"✅ Status: {r.status_code}")
+            print(f"📏 HTML: {len(r.text)} caracteres")
+
+            resultados.append(r.text)
+
+        except Exception as e:
+
+            print(f"❌ ERRO: {e}")
 
     return resultados
 def identificar_loja(texto):
