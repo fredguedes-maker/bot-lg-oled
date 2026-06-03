@@ -144,6 +144,8 @@ def score_oferta(preco, ref, titulo):
     return score, int(desconto * 100)
 
 def analisar():
+    print("🚨 TESTE NOVO ANALISAR 🚨")
+
     global enviados
 
     print("🔁 Rodando análise...")
