@@ -150,36 +150,70 @@ def analisar():
 
     htmls = buscar_fontes()
 
-    for html in htmls:
-        print(f"HTML recebido: {len(html)} caracteres")
+    print(f"📦 Fontes retornadas: {len(htmls)}")
+
+    for i, html in enumerate(htmls):
+
+        print("=" * 60)
+        print(f"🌐 Fonte {i+1}")
+        print(f"📏 HTML recebido: {len(html)} caracteres")
+        print("=" * 60)
+
         if not html:
+            print("❌ HTML vazio")
             continue
 
         ofertas = extrair_ofertas(html)
-        print(f"Ofertas extraídas: {len(ofertas)}")
+
+        print(f"🎯 Ofertas encontradas: {len(ofertas)}")
+
+        if len(ofertas) == 0:
+
+            print("⚠️ Nenhuma oferta encontrada")
+            print("📝 Primeiros 500 caracteres:")
+
+            try:
+                print(html[:500])
+            except:
+                pass
 
         for oferta in ofertas:
+
+            print("📺 Oferta encontrada:")
+            print(oferta)
+
             link = oferta["link"]
 
             if link in enviados:
+                print("🔁 Oferta já enviada")
                 continue
 
             preco = oferta["preco"]
             ref = get_preco_referencia(oferta["modelo"])
 
-            score, desconto = score_oferta(preco, ref, oferta["titulo"])
+            score, desconto = score_oferta(
+                preco,
+                ref,
+                oferta["titulo"]
+            )
 
-            print(f"📊 {oferta['modelo']} - R${preco} - Score {score}")
+            print(
+                f"💰 Preço={preco} Ref={ref} "
+                f"Desconto={desconto}% "
+                f"Score={score}"
+            )
 
             if score >= 70:
                 nivel = "🔥 BUG ALTAMENTE PROVÁVEL"
+
             elif score >= 50:
                 nivel = "⚡ POSSÍVEL BUG"
-            elif score >= 30:
-                nivel = "💰 BOA OPORTUNIDADE"
+
             elif score >= 10:
                 nivel = "🟢 OFERTA DETECTADA"
+
             else:
+                print("🚫 Oferta descartada")
                 continue
 
             enviar(f"""
@@ -199,6 +233,8 @@ def analisar():
 
             enviados.add(link)
             salvar_enviados(enviados)
+
+            print("✅ Alerta enviado")
 
 @app.route("/")
 def home():
